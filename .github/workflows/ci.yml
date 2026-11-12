@@ -1,0 +1,25 @@
+# Lint and tests. (Next: replay the recorded attack runs and fail if attack success rises or legitimate-task
+# success drops versus the accepted defence, like agent-observatory's eval gate.)
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: Tests
+        run: uv run pytest -q
