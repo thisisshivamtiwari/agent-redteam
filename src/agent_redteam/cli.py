@@ -3,15 +3,29 @@
 corpus                                   regenerate corpus/world.json (seeded)
 eval --agent v1-baseline --backend mlx   run the local model, record the cassette, write results/eval-<agent>.json
 eval --agent v1-baseline --backend replay
+gate --candidate results/eval-v4-spotlight-guard.json
+ci                                       what GitHub Actions runs: replay every version, check each reproduces its
+                                         committed result, then gate the accepted version
+report                                   regenerate the README results tables from results/*.json
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+import yaml
 
 from .agent import ROOT
+from .gate import GATE_FILE, gate
 from .harness import evaluate, write_corpus
 from .llm import MlxClient, RecordingClient, ReplayClient
+from .report import VERSIONS, write_readme_tables
+
+REPRODUCED = ("attack_success_rate", "asr_by_family", "legit_success_rate", "legit_by_kind", "violations_executed")
 
 
 def client_for(backend: str, version: str):
@@ -30,6 +44,24 @@ def summary_line(r: dict) -> str:
     )
 
 
+def cmd_ci() -> int:
+    rules = yaml.safe_load(GATE_FILE.read_text())
+    fails = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for version in VERSIONS:
+            committed = json.loads((ROOT / "results" / f"eval-{version}.json").read_text())
+            fresh = evaluate(version, client_for("replay", version), "replay", Path(tmp), Path(tmp))
+            print(summary_line(fresh))
+            diff = [k for k in REPRODUCED if fresh[k] != committed[k]]
+            fails += [f"{version}: replayed {k} {fresh[k]} != committed {committed[k]}" for k in diff]
+        version = rules["accepted_version"]
+        fails += [f"{version}: {f}" for f in gate(Path(tmp) / f"eval-{version}.json")]
+    for f in fails:
+        print("FAIL", f)
+    print("gate:", "FAIL" if fails else "PASS")
+    return 1 if fails else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="agent_redteam")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -37,10 +69,29 @@ def main(argv: list[str] | None = None) -> int:
     ev = sub.add_parser("eval")
     ev.add_argument("--agent", required=True)
     ev.add_argument("--backend", choices=["mlx", "replay"], default="replay")
+    gt = sub.add_parser("gate")
+    gt.add_argument("--candidate", required=True)
+    gt.add_argument("--baseline")
+    sub.add_parser("ci")
+    sub.add_parser("report")
     a = ap.parse_args(argv)
     if a.cmd == "corpus":
         w = write_corpus()
         print(f"{len(w.tickets)} tickets ({sum(t.kind == 'attack' for t in w.tickets)} attacks), {len(w.payments)} payments")
     elif a.cmd == "eval":
         print(summary_line(evaluate(a.agent, client_for(a.backend, a.agent), a.backend)))
+    elif a.cmd == "gate":
+        fails = gate(Path(a.candidate), Path(a.baseline) if a.baseline else None)
+        for f in fails:
+            print("FAIL", f)
+        print("gate:", "FAIL" if fails else "PASS")
+        return 1 if fails else 0
+    elif a.cmd == "ci":
+        return cmd_ci()
+    elif a.cmd == "report":
+        write_readme_tables()
     return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

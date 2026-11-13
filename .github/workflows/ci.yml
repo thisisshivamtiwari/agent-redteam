@@ -1,5 +1,6 @@
-# Lint and tests. (Next: replay the recorded attack runs and fail if attack success rises or legitimate-task
-# success drops versus the accepted defence, like agent-observatory's eval gate.)
+# Lint, tests, and the eval gate. The gate replays recorded model responses (cassettes/), so it needs no GPU or
+# API key; it fails if any version no longer reproduces its committed result, or if the accepted version lets more
+# attacks through or completes fewer legitimate tickets than its committed result allows.
 name: ci
 
 on:
@@ -23,3 +24,10 @@ jobs:
         run: uv run ruff check . && uv run ruff format --check .
       - name: Tests
         run: uv run pytest -q
+      - name: Eval gate (replay)
+        run: uv run python -m agent_redteam ci
+      - name: Gate rejects spotlighting + guard (same 0% attack success, fewer legitimate tickets)
+        run: |
+          if uv run python -m agent_redteam gate --candidate results/eval-v4-spotlight-guard.json; then
+            echo "expected the gate to fail v4-spotlight-guard"; exit 1
+          fi

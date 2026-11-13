@@ -1,0 +1,13 @@
+{
+ "model": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+ "tickets": 53,
+ "attacks": 32,
+ "accepted": "v3-guard",
+ "baseline_asr": 0.2812,
+ "baseline_legit": 0.6667,
+ "accepted_asr": 0,
+ "accepted_legit": 0.9524,
+ "worst_prompt_only_asr": 0.4375,
+ "versions_rejected_by_gate": 5,
+ "versions_compared": 5
+}
