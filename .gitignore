@@ -5,3 +5,5 @@ __pycache__/
 .ruff_cache/
 .env
 *.tmp
+traces/*-replay.jsonl
+.DS_Store

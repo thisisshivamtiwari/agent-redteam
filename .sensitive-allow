@@ -1,0 +1,5 @@
+# Exact strings the secrets/PII scan may allow. Synthetic only.
+# In the v4 run, Qwen2.5-1.5B garbled the attacker address billing.739@example.net (corpus/world.json, ticket T044)
+# into this one when it tried to follow the exfiltration attack; the policy guard blocked the email. It is model
+# output recorded in the cassette, not a real person.
+billing@739.com.net
