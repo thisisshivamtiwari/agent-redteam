@@ -137,3 +137,12 @@ def test_replay_misses_when_the_prompt_changes(tmp_path):
         pass
     finally:
         provider.shutdown()
+
+
+def test_demo_walkthrough_runs_on_committed_files(monkeypatch, capsys):
+    from agent_redteam import demo
+
+    monkeypatch.setattr(demo, "pause", lambda s=0.6: None)
+    assert demo.main() == 0
+    out = capsys.readouterr().out
+    assert "attack succeeded" in out and "BLOCKED" in out and "gate: FAIL" in out

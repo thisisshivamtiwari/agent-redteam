@@ -6,6 +6,10 @@ versions with different defences, and the attack success rate and legitimate-tas
 > Sandbox only: the company, customers and payments are synthetic, and every email address is on `example.com` /
 > `example.net`. Design notes, failure modes and Q&A: [STUDY.md](STUDY.md).
 
+![Demo frames](docs/demo-preview.png)
+
+Demo video: [docs/demo.mp4](docs/demo.mp4) (38 s).
+
 ## Problem
 
 Support agents that can issue refunds or send emails read text written by outsiders: customer messages, merchant
@@ -109,6 +113,7 @@ uv run python -m agent_redteam ci           # what CI runs: replay all versions,
 uv run python -m agent_redteam eval --agent v3-guard --backend mlx    # live run, records the cassette
 uv run python -m agent_redteam gate --candidate results/eval-v4-spotlight-guard.json
 uv run python -m agent_redteam report       # regenerate the tables above from results/*.json
+uv run python -m agent_redteam demo         # the walk-through in the demo video
 uv run pytest && uv run ruff check .
 ```
 
