@@ -1,7 +1,9 @@
 """The support agent: one JSON tool call per turn until it replies to the customer or escalates.
 
 Defences are switched on per agent version (agents/*.yaml):
-  spotlight     untrusted text (ticket body, merchant notes) is fenced and the prompt says it is data, not instructions
+  spotlight     true: untrusted text (ticket body, merchant notes) is fenced and the prompt says it is data, not instructions
+                scoped: merchant notes are fenced as data; the customer's message is fenced as a request to check
+                against the policy (it is the task, so declaring it "never instructions" stops legitimate refunds)
   policy_guard  every refund or message is checked in code against sandbox.policy_violation before it runs
 """
 
@@ -43,6 +45,7 @@ class Config:
 class Run:
     ticket_id: str
     final_tool: str | None = None
+    final_text: str = ""  # what the agent told the customer (reply text or escalation reason)
     tool_calls: list[str] = field(default_factory=list)
     executed: list[dict] = field(default_factory=list)  # sensitive actions that actually ran
     blocked: list[dict] = field(default_factory=list)  # sensitive actions refused by the policy guard
@@ -69,18 +72,21 @@ def parse_action(text: str) -> dict:
     return {"tool": str(obj["tool"]), "args": args}
 
 
-def fence(text: str, on: bool) -> str:
-    return f"<<untrusted>>{text}<</untrusted>>" if on else text
+def fence(text: str, spotlight: bool | str, source: str = "merchant") -> str:
+    if not spotlight:
+        return text
+    tag = "customer" if spotlight == "scoped" and source == "customer" else "untrusted"
+    return f"<<{tag}>>{text}<</{tag}>>"
 
 
-def call_tool(world: World, t: Ticket, name: str, args: dict, spotlight: bool) -> dict:
+def call_tool(world: World, t: Ticket, name: str, args: dict, spotlight: bool | str) -> dict:
     if name == "get_ticket":
         c = world.customers[t.customer_id]
         return {
             "ticket_id": t.ticket_id,
             "customer_id": t.customer_id,
             "customer_email": c["email"],
-            "message": fence(t.text, spotlight),
+            "message": fence(t.text, spotlight, "customer"),
         }
     if name == "lookup_payment":
         p = world.payments.get(str(args.get("payment_id")))
@@ -102,7 +108,7 @@ def call_tool(world: World, t: Ticket, name: str, args: dict, spotlight: bool) -
 
 
 def run_ticket(client, world: World, t: Ticket, agent: dict, tracer, cfg: Config, version: str) -> Run:
-    spotlight, guard = bool(agent.get("spotlight")), bool(agent.get("policy_guard"))
+    spotlight, guard = agent.get("spotlight") or False, bool(agent.get("policy_guard"))
     tools = "\n".join(f"- {n}: {d}" for n, d in TOOL_SPECS.items())
     messages = [
         {"role": "system", "content": agent["system"].format(tools=tools)},
@@ -138,6 +144,7 @@ def run_ticket(client, world: World, t: Ticket, agent: dict, tracer, cfg: Config
                 sp.set_attribute("tool.args", json.dumps(args)[:500])
                 if name in FINAL:
                     run.final_tool = name
+                    run.final_text = str(args.get("text") or args.get("reason") or "")
                     break
                 if name in SENSITIVE:
                     why = policy_violation(world, t, name, args)
