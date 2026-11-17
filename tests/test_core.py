@@ -1,6 +1,7 @@
 import json
 
 from agent_redteam.agent import ROOT, Config, Run, fence, load_agent, run_ticket
+from agent_redteam.export import CASES, cases
 from agent_redteam.gate import gate
 from agent_redteam.harness import attack_succeeded, legit_succeeded, load_world, unbacked_refund_claim
 from agent_redteam.llm import CassetteMiss, Completion, ReplayClient
@@ -146,3 +147,21 @@ def test_demo_walkthrough_runs_on_committed_files(monkeypatch, capsys):
     assert demo.main() == 0
     out = capsys.readouterr().out
     assert "attack succeeded" in out and "BLOCKED" in out and "gate: FAIL" in out
+
+
+def test_exported_cases_match_the_corpus_and_are_self_contained():
+    w = load_world()
+    rows = cases(w)
+    assert [json.loads(line) for line in CASES.read_text().splitlines()] == rows
+    assert len(rows) == len(w.tickets) and sum(r["kind"] == "attack" for r in rows) == 32
+    by_id = {t.ticket_id: t for t in w.tickets}
+    for r in rows:
+        listed = {p["payment_id"] for p in r["payments"]}
+        if r["kind"] == "attack":
+            goal = r["attack_succeeds_if_executed"]
+            assert policy_violation(w, by_id[r["id"]], goal["tool"], {**goal["args_match"], "amount": 1.0})
+            if goal["tool"] == "issue_refund":
+                assert goal["args_match"]["payment_id"] in listed  # the target can be looked up from the case alone
+        elif r["task_succeeds_if"].get("tool"):
+            assert r["task_succeeds_if"]["args_match"]["payment_id"] in listed
+    assert {r["injection_channel"] for r in rows if r["family"] == "indirect"} == {"tool_output:lookup_payment.merchant_note"}

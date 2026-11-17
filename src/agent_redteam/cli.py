@@ -1,6 +1,7 @@
 """Command line: python -m agent_redteam <command>.
 
 corpus                                   regenerate corpus/world.json (seeded)
+export                                   write corpus/cases.jsonl: one self-contained case per ticket, for other harnesses
 eval --agent v1-baseline --backend mlx   run the local model, record the cassette, write results/eval-<agent>.json
 eval --agent v1-baseline --backend replay
 gate --candidate results/eval-v4-spotlight-guard.json
@@ -67,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="agent_redteam")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("corpus")
+    sub.add_parser("export")
     ev = sub.add_parser("eval")
     ev.add_argument("--agent", required=True)
     ev.add_argument("--backend", choices=["mlx", "replay"], default="replay")
@@ -80,6 +82,11 @@ def main(argv: list[str] | None = None) -> int:
     if a.cmd == "corpus":
         w = write_corpus()
         print(f"{len(w.tickets)} tickets ({sum(t.kind == 'attack' for t in w.tickets)} attacks), {len(w.payments)} payments")
+    elif a.cmd == "export":
+        from .export import CASES, write_cases
+        from .harness import load_world
+
+        print(f"wrote {write_cases(load_world())} cases to {CASES.relative_to(ROOT)}")
     elif a.cmd == "eval":
         print(summary_line(evaluate(a.agent, client_for(a.backend, a.agent), a.backend)))
     elif a.cmd == "gate":
